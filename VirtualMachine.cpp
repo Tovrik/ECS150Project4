@@ -251,16 +251,24 @@ void add_to_free_list(MemoryPool *actual_mem_pool, mem_chunk* free_mem_chunk) {
     // merge with chunk before in memory
     if (it != actual_mem_pool->free_list.begin()) {
         --it;                                                       // it = prev                                v _ _
-        if ((*it)->base + (*it)->length == (*(++it))->base) {       // it = prev. after ++it, it = current      v _ _   --> _ v _ 
+        if ((*it)->base + (*it)->length == (*(++it))->base) {       // it = prev. after ++it, it = current      v _ _   --> _ v _
             --it;                                                   // it = prev.                               v _ _
             // printf("%x %x\n", (*it)->base, (*it)->length);
-            (*it)->length = (*it)->length + (*(++it))->length;      // it = prev. after ++it, it = current      v _ _   --> _ v _ 
+            (*it)->length = (*it)->length + (*(++it))->length;      // it = prev. after ++it, it = current      v _ _   --> _ v _
             actual_mem_pool->free_list.erase(it);                   // it = next                                _ v
             // it--;
             // printf("%x %x\n", (*it)->base, (*it)->length);
         }
     }
     // printf("%d\n", actual_mem_pool->free_list.size());
+}
+
+void read_sector() {
+
+}
+
+void write_sector() {
+
 }
 
 ///////////////////////// Callbacks ///////////////////////////
@@ -502,7 +510,7 @@ TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescrip
 // 3. Call MachineFileWrite with the new address so that it can be written (The new address is from the allocation from shared memory.)
 // 4. Put thread to wait state
 // 5. Schedule
-// 6. When callback is called wake the thread 
+// 6. When callback is called wake the thread
 // 7. In the woken thread.  Deallocate the shared memory location.
 TVMStatus VMFileWrite(int filedescriptor, void *data, int *length) {
     MachineSuspendSignals(sigstate);
@@ -517,7 +525,7 @@ TVMStatus VMFileWrite(int filedescriptor, void *data, int *length) {
         VMMemoryPoolAllocate(1, 512, &addr);
     }
     else {
-        VMMemoryPoolAllocate(1, (TVMMemorySize)(*length), &addr);    
+        VMMemoryPoolAllocate(1, (TVMMemorySize)(*length), &addr);
     }
     // printf("writing_chunk_base: %p\n",addr);
     // void * memcpy ( void * destination, const void * source, size_t num );
@@ -538,7 +546,7 @@ TVMStatus VMFileWrite(int filedescriptor, void *data, int *length) {
         temp_length -= 512;
         data += 512;
     }
-    
+
     // TVMStatus VMMemoryPoolDeallocate(TVMMemoryPoolID memory, void *pointer) {
     VMMemoryPoolDeallocate(1, addr);
     if (current_thread->call_back_result != -1) {
@@ -556,7 +564,7 @@ TVMStatus VMFileWrite(int filedescriptor, void *data, int *length) {
 // 2. Call MachineFileRead with the new address so that it can be filled
 // 3. Put thread to wait state
 // 4. Schedule
-// 5. When callback is called wake the thread 
+// 5. When callback is called wake the thread
 // 6. In the woken thread. Copy the read data from the shared memory location to the data location passed in with VMFileRead. Remember the data parameter is the destination and the shared memory location is the source.
 // 7. Deallocate the shared memory location.
 TVMStatus VMFileRead(int filedescriptor, void *data, int *length) {
@@ -570,8 +578,8 @@ TVMStatus VMFileRead(int filedescriptor, void *data, int *length) {
         VMMemoryPoolAllocate(1, 512, &addr);
     }
     else {
-        VMMemoryPoolAllocate(1, (TVMMemorySize)(*length), &addr);    
-    } 
+        VMMemoryPoolAllocate(1, (TVMMemorySize)(*length), &addr);
+    }
     current_thread->thread_state = VM_THREAD_STATE_WAITING;
     int temp_length = *length;
     *length = 0;
@@ -585,8 +593,8 @@ TVMStatus VMFileRead(int filedescriptor, void *data, int *length) {
         else {
             MachineFileRead(filedescriptor, addr, temp_length, MachineFileCallback, current_thread);
             scheduler();
-            memcpy(data, addr, temp_length);  
-            *length += current_thread->call_back_result;     
+            memcpy(data, addr, temp_length);
+            *length += current_thread->call_back_result;
         }
         temp_length -= 512;
         data += 512;
@@ -885,7 +893,48 @@ TVMStatus VMMemoryPoolDeallocate(TVMMemoryPoolID memory, void *pointer) {
     }
 }
 
+/////////////////////// VMMFileSystem Functions ///////////////////////////
 
+
+TVMStatus VMFileSystemValidPathName(const char *name) {
+
+}
+
+TVMStatus VMFileSystemIsRelativePath(const char *name) {
+
+}
+
+TVMStatus VMFileSystemIsAbsolutePath(const char *name) {
+
+}
+
+TVMStatus VMFileSystemGetAbsolutePath(char *abspath, const char *curpath, const char *destpath) {
+
+}
+
+TVMStatus VMFileSystemPathIsOnMount(const char *mntpt, const char *destpath) {
+
+}
+
+TVMStatus VMFileSystemDirectoryFromFullPath(char *dirname, const char *path) {
+
+}
+
+TVMStatus VMFileSystemFileFromFullPath(char *filename, const char *path) {
+
+}
+
+TVMStatus VMFileSystemConsolidatePath(char *fullpath, const char *dirname, const char *filename) {
+
+}
+
+TVMStatus VMFileSystemSimplifyPath(char *simpath, const char *abspath, const char *relpath) {
+
+}
+
+TVMStatus VMFileSystemRelativePath(char *relpath, const char *basepath, const char *destpath) {
+
+}
 
 
 } // end extern C
