@@ -6,6 +6,7 @@
 #include <vector>
 #include <deque>
 #include <list>
+#include <fcntl.h>
 using namespace std;
 
 const TVMMemoryPoolID VM_MEMORY_POOL_ID_SYSTEM = 0;
@@ -276,13 +277,13 @@ void write_sector() {
 void timerDecrement(void *calldata) {
     // decrements ticks for each sleeping thread
     for (int i = 0; i < sleep_vector.size(); i++) {
-            sleep_vector[i]->ticks_remaining--;
-            if (sleep_vector[i]->ticks_remaining ==  0) {
-                sleep_vector[i]->thread_state = VM_THREAD_STATE_READY;
-                determine_queue_and_push(sleep_vector[i]);
-                sleep_vector.erase(sleep_vector.begin() + i);
-                scheduler();
-            }
+        sleep_vector[i]->ticks_remaining--;
+        if (sleep_vector[i]->ticks_remaining ==  0) {
+            sleep_vector[i]->thread_state = VM_THREAD_STATE_READY;
+            determine_queue_and_push(sleep_vector[i]);
+            sleep_vector.erase(sleep_vector.begin() + i);
+            scheduler();
+        }
     }
 }
 
@@ -310,43 +311,35 @@ void MachineFileCallback(void* param, int result) {
 }
 
 ///////////////////////// VMThread Functions ///////////////////////////
-TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemorySize sharedsize, int argc, char *argv[]) { //The time in milliseconds of the virtual machine tick is specified by the tickms parameter, the machine responsiveness is specified by the machinetickms.
+TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemorySize sharedsize, const char *mount, int argc, char *argv[]) { //The time in milliseconds of the virtual machine tick is specified by the tickms parameter, the machine responsiveness is specified by the machinetickms.
     typedef void (*TVMMainEntry)(int argc, char* argv[]);
     TVMMainEntry VMMain;
     VMMain = VMLoadModule(argv[0]);
     if (VMMain != NULL) {
         sharedsize = (sharedsize + 0xFFF) & (~0xFFF);
         void *shared_mem_base = MachineInitialize(machinetickms, sharedsize); //The timeout parameter specifies the number of milliseconds the machine will sleep between checking for requests.
-        // printf("shared_mem_base: %p\n",shared_mem_base);
         MachineRequestAlarm(tickms*1000, timerDecrement, NULL); // NULL b/c passing data through global vars
         MachineEnableSignals();
         // VM_MEMORY_POOL_SYSTEM
-        // printf("making main pool\n");
         uint8_t* base = new uint8_t[heapsize];
         MemoryPool* main_pool = new MemoryPool(heapsize, VM_MEMORY_POOL_ID_SYSTEM, base);
         mem_pool_vector.push_back(main_pool);
         // SHARED_MEMORY_POOL
-        // printf("made main pool, making shared\n");
-        // VMMemoryPoolCreate(shared_mem_base, sharedsize, (unsigned int *)1);
         MemoryPool* shared_mem_pool = new MemoryPool(sharedsize, 1, (uint8_t*)shared_mem_base);
-        // printf("%p\n",shared_mem_pool->base);
         mem_pool_vector.push_back(shared_mem_pool);
-        // printf("%p\n",mem_pool_vector[1]->base);
         // create main_thread
-        // printf("made shared, making main thread\n");
         TCB* main_thread = new TCB((unsigned int *)0, VM_THREAD_STATE_RUNNING, VM_THREAD_PRIORITY_NORMAL, 0, NULL, NULL, 0);
         thread_vector.push_back(main_thread);
         current_thread = main_thread;
         // create idle_thread
-        // printf("made main thread, making idle\n");
         idle_thread = new TCB((unsigned int *)1, VM_THREAD_STATE_DEAD, VM_THREAD_PRIORITY_IDLE, 0x100000, NULL, NULL, 0);
-        // printf("a\n");
         idle_thread->thread_state = VM_THREAD_STATE_READY;
-        // printf("b\n");
         MachineContextCreate(&(idle_thread->machine_context), idleEntry, NULL, idle_thread->stack_base, idle_thread->stack_size);
+        // mount filesystem and read BPB
+        MachineFileOpen(mount, O_RDWR, 0644, MachineFileCallback, current_thread);
+        // void MachineFileRead(int fd, void *data, int length, TMachineFileCallback callback, void *calldata);
+        MachineFileRead()
         // call VMMain
-        // printf("made idle\n");
-        // printf("shared_mem_base: %p\n",shared_mem_base);
         VMMain(argc, argv);
         return VM_STATUS_SUCCESS;
     }
@@ -895,46 +888,6 @@ TVMStatus VMMemoryPoolDeallocate(TVMMemoryPoolID memory, void *pointer) {
 
 /////////////////////// VMMFileSystem Functions ///////////////////////////
 
-
-TVMStatus VMFileSystemValidPathName(const char *name) {
-
-}
-
-TVMStatus VMFileSystemIsRelativePath(const char *name) {
-
-}
-
-TVMStatus VMFileSystemIsAbsolutePath(const char *name) {
-
-}
-
-TVMStatus VMFileSystemGetAbsolutePath(char *abspath, const char *curpath, const char *destpath) {
-
-}
-
-TVMStatus VMFileSystemPathIsOnMount(const char *mntpt, const char *destpath) {
-
-}
-
-TVMStatus VMFileSystemDirectoryFromFullPath(char *dirname, const char *path) {
-
-}
-
-TVMStatus VMFileSystemFileFromFullPath(char *filename, const char *path) {
-
-}
-
-TVMStatus VMFileSystemConsolidatePath(char *fullpath, const char *dirname, const char *filename) {
-
-}
-
-TVMStatus VMFileSystemSimplifyPath(char *simpath, const char *abspath, const char *relpath) {
-
-}
-
-TVMStatus VMFileSystemRelativePath(char *relpath, const char *basepath, const char *destpath) {
-
-}
 
 
 } // end extern C
