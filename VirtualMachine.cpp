@@ -91,9 +91,36 @@ class MemoryPool {
     list<mem_chunk*> alloc_list;
     uint8_t *base;
     unsigned int free_space;
-
 };
 
+
+///////////////////////// BPB Struct definition ///////////////////////////
+
+#pragma pack(1)
+typedef struct bpb {
+    unsigned char   *oem_name[8];
+    uint32_t        *bytes_per_sector;
+    uint16_t        *sectors_per_cluster;
+    uint32_t        *reserved_sectors;
+    uint16_t        *fat_count;
+    uint32_t        *root_entry;
+    uint32_t        *sector_count;
+    uint16_t        *media;
+    uint32_t        *fat_size;
+    uint32_t        *sectors_per_track;
+    uint32_t        *head_count;
+    uint32_t        *hidden_sector_count;
+    uint32_t        *sector_count;
+    uint16_t        *drive_number;
+    uint16_t        *boot_signature;
+    unsigned char   *volume_id[4];
+    unsigned char   *volume_label[11];
+    unsigned char   *file_system_type[8];
+    uint16_t        *root_dir_sectors;
+    uint16_t        *first_root_sector;
+    uint16_t        *first_data_sector;
+    uint16_t        *cluster_count;
+} bpb;
 
 ///////////////////////// Globals ///////////////////////////
 #define VM_THREAD_PRIORITY_IDLE                  ((TVMThreadPriority)0x00)
@@ -109,6 +136,8 @@ TCB*        idle_thread;
 TCB*        current_thread;
 Mutex*      current_mutex;
 MemoryPool* current_mem_pool;
+int file_descriptor;
+bpb *the_bpb;
 
 volatile int timer;
 TMachineSignalStateRef sigstate;
@@ -264,6 +293,14 @@ void add_to_free_list(MemoryPool *actual_mem_pool, mem_chunk* free_mem_chunk) {
     // printf("%d\n", actual_mem_pool->free_list.size());
 }
 
+void bpb_read() {
+    // MachineFileSeek(file_descriptor, 0, );
+    uint8_t *addr = 0;
+    MachineFileRead(file_descriptor, addr, 512, MachineFileCallback, current_thread);
+    // the_bpb = addr
+    memcpy(the_bpb, addr, 62);
+}
+
 void read_sector() {
 
 }
@@ -337,8 +374,10 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         MachineContextCreate(&(idle_thread->machine_context), idleEntry, NULL, idle_thread->stack_base, idle_thread->stack_size);
         // mount filesystem and read BPB
         MachineFileOpen(mount, O_RDWR, 0644, MachineFileCallback, current_thread);
+        file_descriptor = current_thread->call_back_result;
         // void MachineFileRead(int fd, void *data, int length, TMachineFileCallback callback, void *calldata);
-        MachineFileRead()
+        // MachineFileRead();
+        bpb_read();
         // call VMMain
         VMMain(argc, argv);
         return VM_STATUS_SUCCESS;
