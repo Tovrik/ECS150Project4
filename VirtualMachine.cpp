@@ -98,28 +98,33 @@ class MemoryPool {
 
 #pragma pack(1)
 typedef struct bpb {
-    unsigned char   *oem_name[8];
-    uint32_t        *bytes_per_sector;
-    uint16_t        *sectors_per_cluster;
-    uint32_t        *reserved_sectors;
-    uint16_t        *fat_count;
-    uint32_t        *root_entry;
-    uint32_t        *sector_count;
-    uint16_t        *media;
-    uint32_t        *fat_size;
-    uint32_t        *sectors_per_track;
-    uint32_t        *head_count;
-    uint32_t        *hidden_sector_count;
-    uint32_t        *sector_count;
-    uint16_t        *drive_number;
-    uint16_t        *boot_signature;
-    unsigned char   *volume_id[4];
-    unsigned char   *volume_label[11];
-    unsigned char   *file_system_type[8];
-    uint16_t        *root_dir_sectors;
-    uint16_t        *first_root_sector;
-    uint16_t        *first_data_sector;
-    uint16_t        *cluster_count;
+    unsigned char   oem_name[8];
+    uint16_t        bytes_per_sector;
+    uint8_t         sectors_per_cluster;
+    uint16_t        reserved_sector_count;
+    uint8_t         fat_count;                 //NumFATs
+    uint16_t        root_entry_count;
+    uint16_t        sector_count_16;           //TotSec16
+    uint8_t         media;
+    uint16_t        fat_size;
+    uint16_t        sectors_per_track;
+    uint16_t        head_count;                 //NumHeads
+    uint32_t        hidden_sector_count;
+    uint32_t        sector_count_32;            //TotSec32
+    uint8_t         drive_number;
+    uint8_t         boot_signature;
+    unsigned char   volume_id[4];
+    unsigned char   volume_label[11];
+    unsigned char   file_system_type[8];
+    // these are supposed to be calculated values
+    // FirstRootSector = BPB_RsvdSecCnt + BPB_NumFATs * BPB_FATSz16;
+    // RootDirectorySectors = (BPB_RootEntCnt * 32) / 512;
+    // FirstDataSector = FirstRootSector + RootDirectorySectors;
+    // ClusterCount = (BPB_TotSec32 - FirstDataSector) / BPB_SecPerClus;
+    uint8_t         root_dir_sectors;
+    uint8_t         first_root_sector;
+    uint8_t         first_data_sector;
+    uint16_t        cluster_count;
 } bpb;
 
 ///////////////////////// Globals ///////////////////////////
@@ -136,8 +141,9 @@ TCB*        idle_thread;
 TCB*        current_thread;
 Mutex*      current_mutex;
 MemoryPool* current_mem_pool;
-int file_descriptor;
-bpb *the_bpb;
+int         file_descriptor;
+bpb         *the_bpb;
+TVMMutexID  sector_mutex;
 
 volatile int timer;
 TMachineSignalStateRef sigstate;
@@ -293,22 +299,6 @@ void add_to_free_list(MemoryPool *actual_mem_pool, mem_chunk* free_mem_chunk) {
     // printf("%d\n", actual_mem_pool->free_list.size());
 }
 
-void bpb_read() {
-    // MachineFileSeek(file_descriptor, 0, );
-    uint8_t *addr = 0;
-    MachineFileRead(file_descriptor, addr, 512, MachineFileCallback, current_thread);
-    // the_bpb = addr
-    memcpy(the_bpb, addr, 62);
-}
-
-void read_sector() {
-
-}
-
-void write_sector() {
-
-}
-
 ///////////////////////// Callbacks ///////////////////////////
 // for ref: typedef void (*TMachineAlarmCallback)(void *calldata);
 void timerDecrement(void *calldata) {
@@ -347,6 +337,30 @@ void MachineFileCallback(void* param, int result) {
     }
 }
 
+///////////////////////// FAT Utility Functions ///////////////////////////
+void read_sector(int fd, int offset) {
+    MachineSuspendSignals(sigstate);
+    VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
+    void *addr;
+    VMMemoryPoolAllocate(1, 512, &addr);
+    MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    scheduler();
+    MachineFileRead(fd, addr, 512, MachineFileCallback, current_thread);
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    scheduler();
+    bpb *temp = new bpb;
+    memcpy(temp, addr, 512);
+    the_bpb = temp;
+    VMMemoryPoolDeallocate(1, addr);
+    VMMutexRelease(sector_mutex);
+    MachineResumeSignals(sigstate);
+}
+
+void write_sector() {
+
+}
+
 ///////////////////////// VMThread Functions ///////////////////////////
 TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemorySize sharedsize, const char *mount, int argc, char *argv[]) { //The time in milliseconds of the virtual machine tick is specified by the tickms parameter, the machine responsiveness is specified by the machinetickms.
     typedef void (*TVMMainEntry)(int argc, char* argv[]);
@@ -374,12 +388,27 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         MachineContextCreate(&(idle_thread->machine_context), idleEntry, NULL, idle_thread->stack_base, idle_thread->stack_size);
         // mount filesystem and read BPB
         MachineFileOpen(mount, O_RDWR, 0644, MachineFileCallback, current_thread);
+        current_thread->thread_state = VM_THREAD_STATE_WAITING;
+        scheduler();
         file_descriptor = current_thread->call_back_result;
-        // void MachineFileRead(int fd, void *data, int length, TMachineFileCallback callback, void *calldata);
-        // MachineFileRead();
-        bpb_read();
+        VMMutexCreate(&sector_mutex);
+        printf("hello\n");
+        the_bpb = new bpb;
+        read_sector(file_descriptor, 3);
+        // bpb calculations
+        the_bpb->root_dir_sectors  = (the_bpb->root_entry_count * 32) / 512;
+        the_bpb->first_root_sector = the_bpb->reserved_sector_count + the_bpb->fat_count * the_bpb->fat_size;
+        the_bpb->first_data_sector = the_bpb->first_root_sector + the_bpb->root_dir_sectors;
+        the_bpb->cluster_count     = (the_bpb->sector_count_32 - the_bpb->first_data_sector) / the_bpb->sectors_per_cluster;
+        printf("bps %d\nspc %d\nrsc %d\nfc %d\nrec %d\nsc16 %d\nm %d\nfs %d\nspt %d\nhc %d\nsc32 %d\nfrs %d\nrds %d\nfds %d\ncc %d\n", the_bpb->bytes_per_sector, the_bpb->sectors_per_cluster, the_bpb->reserved_sector_count,
+                                                                                    the_bpb->fat_count, the_bpb->root_entry_count, the_bpb->sector_count_16, the_bpb->media, the_bpb->fat_size,
+                                                                                    the_bpb->sectors_per_track, the_bpb->head_count, the_bpb->sector_count_32,
+                                                                                    the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
+                                                                                    the_bpb->cluster_count);
+        printf("bye\n");
         // call VMMain
         VMMain(argc, argv);
+        // unmount()
         return VM_STATUS_SUCCESS;
     }
     else {
@@ -924,9 +953,4 @@ TVMStatus VMMemoryPoolDeallocate(TVMMemoryPoolID memory, void *pointer) {
         }
     }
 }
-
-/////////////////////// VMMFileSystem Functions ///////////////////////////
-
-
-
 } // end extern C
