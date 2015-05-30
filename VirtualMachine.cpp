@@ -338,7 +338,7 @@ void MachineFileCallback(void* param, int result) {
 }
 
 ///////////////////////// FAT Utility Functions ///////////////////////////
-void read_sector(int fd, int offset) {
+void read_bpb(int fd, int offset) {
     MachineSuspendSignals(sigstate);
     VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
     void *addr;
@@ -392,9 +392,8 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         scheduler();
         file_descriptor = current_thread->call_back_result;
         VMMutexCreate(&sector_mutex);
-        printf("hello\n");
         the_bpb = new bpb;
-        read_sector(file_descriptor, 3);
+        read_bpb(file_descriptor, 3);
         // bpb calculations
         the_bpb->root_dir_sectors  = (the_bpb->root_entry_count * 32) / 512;
         the_bpb->first_root_sector = the_bpb->reserved_sector_count + the_bpb->fat_count * the_bpb->fat_size;
@@ -405,7 +404,6 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
                                                                                     the_bpb->sectors_per_track, the_bpb->head_count, the_bpb->sector_count_32,
                                                                                     the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
                                                                                     the_bpb->cluster_count);
-        printf("bye\n");
         // call VMMain
         VMMain(argc, argv);
         // unmount()
