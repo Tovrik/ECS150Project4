@@ -133,6 +133,8 @@ typedef struct bpb {
 vector<TCB*> thread_vector;
 vector<Mutex*> mutex_vector;
 vector<MemoryPool*> mem_pool_vector;
+vector<uint16_t> fat_vector;
+void*       FAT_buffer;
 deque<TCB*> low_priority_queue;
 deque<TCB*> normal_priority_queue;
 deque<TCB*> high_priority_queue;
@@ -357,6 +359,33 @@ void read_bpb(int fd, int offset) {
     MachineResumeSignals(sigstate);
 }
 
+void read_FAT(int fd, int offset) {
+    TMachineSignalStateRef sigstate1;
+    MachineSuspendSignals(sigstate1);
+    VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
+    VMMemoryPoolAllocate(1, 512, &FAT_buffer);
+    MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    scheduler();
+    MachineFileRead(fd, FAT_buffer, 512, MachineFileCallback, current_thread);
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    scheduler();
+    uint16_t *temp_buffer = (uint16_t*)FAT_buffer;
+    for (int i = 0; i < 256; ++i)
+    {
+        if(temp_buffer[i] != 0) {
+        fat_vector.push_back(temp_buffer[i]);
+        }
+        else {
+            break;
+        }
+        // printf("%d\n", i);
+    }
+    VMMemoryPoolDeallocate(1, FAT_buffer);
+    VMMutexRelease(sector_mutex);
+    MachineResumeSignals(sigstate1);
+}
+
 void write_sector() {
 
 }
@@ -399,6 +428,12 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         the_bpb->first_root_sector = the_bpb->reserved_sector_count + the_bpb->fat_count * the_bpb->fat_size;
         the_bpb->first_data_sector = the_bpb->first_root_sector + the_bpb->root_dir_sectors;
         the_bpb->cluster_count     = (the_bpb->sector_count_32 - the_bpb->first_data_sector) / the_bpb->sectors_per_cluster;
+
+        for (int i = 0; i < the_bpb->fat_size; ++i) {
+            read_FAT(file_descriptor, (i+1)*512);
+            printf("%x", fat_vector[i]);
+        }
+
         printf("bps %d\nspc %d\nrsc %d\nfc %d\nrec %d\nsc16 %d\nm %d\nfs %d\nspt %d\nhc %d\nsc32 %d\nfrs %d\nrds %d\nfds %d\ncc %d\n", the_bpb->bytes_per_sector, the_bpb->sectors_per_cluster, the_bpb->reserved_sector_count,
                                                                                     the_bpb->fat_count, the_bpb->root_entry_count, the_bpb->sector_count_16, the_bpb->media, the_bpb->fat_size,
                                                                                     the_bpb->sectors_per_track, the_bpb->head_count, the_bpb->sector_count_32,
