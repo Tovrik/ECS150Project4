@@ -84,13 +84,12 @@ class MemoryPool {
                 // printf("%p\n", base);
             }
 
-    TVMMemorySize memory_pool_size;
-    TVMMemoryPoolID memory_pool_id;
-    // TVMMemorySizeRef memory_size_ref;
-    list<mem_chunk*> free_list;
-    list<mem_chunk*> alloc_list;
-    uint8_t *base;
-    unsigned int free_space;
+    TVMMemorySize       memory_pool_size;
+    TVMMemoryPoolID     memory_pool_id;
+    list<mem_chunk*>    free_list;
+    list<mem_chunk*>    alloc_list;
+    uint8_t             *base;
+    unsigned int        free_space;
 };
 
 
@@ -128,36 +127,48 @@ typedef struct bpb {
 
 ///////////////////////// Root Entry Struct definition ///////////////////////////
 typedef struct{
-    char DLongFileName[VM_FILE_SYSTEM_MAX_PATH];
-    char DShortFileName[VM_FILE_SYSTEM_SFN_SIZE];
-    unsigned int DSize;
-    unsigned char DAttributes;
-    SVMDateTime DCreate;
-    SVMDateTime DAccess;
-    SVMDateTime DModify;
-    uint16_t cluster_location;
+    // char            DLongFileName[VM_FILE_SYSTEM_MAX_PATH];
+    // uint64_t    DSize;
+    // uint8_t     DAttributes;
+    // SVMDateTime     DCreate;
+    // SVMDateTime     DAccess;
+    // SVMDateTime     DModify;
+
+    char        DIR_Name[VM_FILE_SYSTEM_SFN_SIZE];
+    uint8_t     DIR_Attr,
+                DIR_NTRes,
+                DIR_CrtTimeTenth;
+    uint16_t    DIR_CrtTime,
+                DIR_CrtDate,
+                DIR_LstAccDate,
+                DIR_FstClusHI,
+                DIR_WrtTime,
+                DIR_WrtDate,
+                DIR_FstClusLO;
+    uint32_t    DIR_FileSize;
+
 } entry;
 
 ///////////////////////// Globals ///////////////////////////
 #define VM_THREAD_PRIORITY_IDLE                  ((TVMThreadPriority)0x00)
 
-vector<TCB*> thread_vector;
-vector<Mutex*> mutex_vector;
+vector<TCB*>        thread_vector;
+vector<Mutex*>      mutex_vector;
 vector<MemoryPool*> mem_pool_vector;
-vector<uint16_t> fat_vector;
-void*       FAT_buffer;
-deque<TCB*> low_priority_queue;
-deque<TCB*> normal_priority_queue;
-deque<TCB*> high_priority_queue;
-vector<TCB*> sleep_vector;
-TCB*        idle_thread;
-TCB*        current_thread;
-Mutex*      current_mutex;
-MemoryPool* current_mem_pool;
-int         file_descriptor;
-bpb         *the_bpb;
-TVMMutexID  sector_mutex;
-vector<entry*> entry_vector;
+vector<uint16_t>    fat_vector;
+void*               FAT_buffer;
+deque<TCB*>         low_priority_queue;
+deque<TCB*>         normal_priority_queue;
+deque<TCB*>         high_priority_queue;
+vector<TCB*>        sleep_vector;
+TCB*                idle_thread;
+TCB*                current_thread;
+Mutex*              current_mutex;
+MemoryPool*         current_mem_pool;
+int                 file_descriptor;
+bpb                 *the_bpb;
+TVMMutexID          sector_mutex;
+vector<entry*>      entry_vector;
 
 volatile int timer;
 TMachineSignalStateRef sigstate;
@@ -397,62 +408,72 @@ void read_FAT(int fd, int offset) {
 }
 
 void read_root(int fd, int offset) {
-    printf("1\n");
     MachineSuspendSignals(sigstate);
-    printf("2\n");
     VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
-    printf("3\n");
     void *addr;
-    printf("4\n");
     VMMemoryPoolAllocate(1, 512, &addr);
-    printf("5\n");
     MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
-    printf("6\n");
     current_thread->thread_state = VM_THREAD_STATE_WAITING;
-    printf("7\n");
     scheduler();
-    printf("8\n");
+
     MachineFileRead(fd, addr, 512, MachineFileCallback, current_thread);
-    printf("9\n");
     current_thread->thread_state = VM_THREAD_STATE_WAITING;
-    printf("10\n");
     scheduler();
+
     for (int i = 0; i < 512/32; ++i)
     {
-        printf("%p\n", addr);
-        printf("11-%d\n", i);
-        if (((unsigned char *)addr)[11] & 0xF) 
+        printf("Address:     %p\n", addr);
+        if (((unsigned char *)addr)[11] & 0xF)
         {
-            printf("12-%d\n", i);
         }
         else {
-            printf("13-%d\n", i);
             entry* new_entry = new entry;
             for (int i = 0; i < 8; ++i)
             {
                 if (((char *)addr)[i] != 0x20)
                 {
-                    new_entry->DShortFileName[i] = ((char *)addr)[i];
+                    new_entry->DIR_Name[i] = ((char *)addr)[i];
                 }
             }
-            new_entry->DShortFileName[i] = '.';
+            new_entry->DIR_Name[i] = '.';
             for (int i = 0; i < 3; ++i)
             {
                 if (((char *)addr)[i] != 0x20)
                 {
-                    new_entry->DShortFileName[8+i] = ((char *)addr)[i];
+                    new_entry->DIR_Name[8+i] = ((char *)addr)[i];
                 }
             }
-            new_entry->DSize = *((unsigned int*)addr + 28);
-            new_entry->DAttributes = *((unsigned char*)addr+11);
-            new_entry->cluster_location = *((uint16_t*)addr+26);
-            // entry->DCreate = 
-            // entry->DAccess = 
-            // entry->DModify = 
+            new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
+            new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
+            new_entry->DIR_CrtTimeTenth = *((uint8_t*)addr + 13);
+            new_entry->DIR_CrtTime      = *((uint16_t*)addr + 14);
+            new_entry->DIR_CrtDate      = *((uint16_t*)addr + 16);
+            new_entry->DIR_LstAccDate   = *((uint16_t*)addr + 18);
+            new_entry->DIR_FstClusHI    = *((uint16_t*)addr + 20);
+            new_entry->DIR_WrtTime      = *((uint16_t*)addr + 22);
+            new_entry->DIR_WrtDate      = *((uint16_t*)addr + 24);
+            new_entry->DIR_FstClusLO    = *((uint16_t*)addr + 26);
+            new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
+
+            // new_entry->DModify = *((SVMDateTime)addr+22);
+            printf("DIR_Name        : %x\n \n",  new_entry->DIR_Name);
+            printf("DIR_Attr        : %x\n",     new_entry->DIR_Attr);
+            printf("DIR_NTRes       : %x\n",     new_entry->DIR_NTRes);
+            printf("DIR_CrtTimeTenth: %x\n",     new_entry->DIR_CrtTimeTenth);
+            printf("DIR_CrtTime     : %x\n",     new_entry->DIR_CrtTime);
+            printf("DIR_CrtDate     : %x\n \n",  new_entry->DIR_CrtDate);
+            printf("DIR_LstAccDate  : %x\n \n",  new_entry->DIR_LstAccDate);
+            printf("DIR_FstClusHI   : %x\n \n",  new_entry->DIR_FstClusHI);
+            printf("DIR_WrtTime     : %x\n \n",  new_entry->DIR_WrtTime);
+            printf("DIR_WrtDate     : %x\n \n",  new_entry->DIR_WrtDate);
+            printf("DIR_FstClusLO   : %x\n \n",  new_entry->DIR_FstClusLO);
+            printf("DIR_FileSize    : %x\n \n",  new_entry->DIR_FileSize);
+
             entry_vector.push_back(new_entry);
         }
         addr += 32;
     }
+
     printf("%d\n", entry_vector.size());
     VMMemoryPoolDeallocate(1, addr);
     VMMutexRelease(sector_mutex);
@@ -517,7 +538,7 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         // read root
         for (int i = the_bpb->first_root_sector; i < the_bpb->first_data_sector; ++i) {
             printf("#########%d\n", i);
-            read_root(file_descriptor, i*512); 
+            read_root(file_descriptor, i*512);
         }
         // call VMMain
         VMMain(argc, argv);
