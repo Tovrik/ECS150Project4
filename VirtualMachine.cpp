@@ -169,7 +169,7 @@ int                 file_descriptor;
 bpb                 *the_bpb;
 TVMMutexID          sector_mutex;
 vector<entry*>      entry_vector;
-
+int                 count = 0;
 volatile int timer;
 TMachineSignalStateRef sigstate;
 
@@ -458,15 +458,15 @@ void print_root(entry * new_entry) {
     printf("DIR_Name        : %s\n",  new_entry->DIR_Name);
     printf("DIR_Attr        : %x\n",  new_entry->DIR_Attr);
     printf("DIR_NTRes       : %x\n",  new_entry->DIR_NTRes);
-    printf("DIR_CrtTimeTenth: %x\n",  new_entry->DIR_CrtTimeTenth);
-    printf("DIR_CrtTime     : %x\n",  new_entry->DIR_CrtTime);
-    printf("DIR_CrtDate     : %x\n",  new_entry->DIR_CrtDate);
-    printf("DIR_LstAccDate  : %x\n",  new_entry->DIR_LstAccDate);
+    printf("DIR_CrtTimeTenth: %u\n",  new_entry->DIR_CrtTimeTenth);
+    printf("DIR_CrtTime     : %u\n",  new_entry->DIR_CrtTime);
+    printf("DIR_CrtDate     : %u\n",  new_entry->DIR_CrtDate);
+    printf("DIR_LstAccDate  : %u\n",  new_entry->DIR_LstAccDate);
     printf("DIR_FstClusHI   : %x\n",  new_entry->DIR_FstClusHI);
-    printf("DIR_WrtTime     : %x\n",  new_entry->DIR_WrtTime);
-    printf("DIR_WrtDate     : %x\n",  new_entry->DIR_WrtDate);
+    printf("DIR_WrtTime     : %u\n",  new_entry->DIR_WrtTime);
+    printf("DIR_WrtDate     : %u\n",  new_entry->DIR_WrtDate);
     printf("DIR_FstClusLO   : %x\n",  new_entry->DIR_FstClusLO);
-    printf("DIR_FileSize    : %x\n",  new_entry->DIR_FileSize);
+    printf("DIR_FileSize    : %u\n\n",  new_entry->DIR_FileSize);
 }
 
 void read_root(int fd, int offset) {
@@ -484,53 +484,35 @@ void read_root(int fd, int offset) {
 
     for (int i = 0; i < 512/32; ++i)
     {
-        // printf("Address          :%p\n", addr);
-        if (((unsigned char *)addr)[11] & 0xF)
-        {
+        entry* new_entry = new entry;
+
+        for(int j = 0; j < 11; ++j) {
+            new_entry->DIR_Name[j] = *(char*)(addr + j);
         }
-        else {
-            entry* new_entry = new entry;
-            // for (int i = 0; i < 8; ++i)
-            // {
-            //     if (((char *)addr)[i] != 0x20)
-            //     {
-            //         new_entry->DIR_Name[i] = ((char *)addr)[i];
-            //     }
-            // }
-            // new_entry->DIR_Name[i] = '.';
-            // for (int i = 0; i < 3; ++i)
-            // {
-            //     if (((char *)addr)[i] != 0x20)
-            //     {
-            //         new_entry->DIR_Name[8+i] = ((char *)addr)[i];
-            //     }
-            // }
+        new_entry->DIR_Name[11] = '\0';
+        new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
+        new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
+        new_entry->DIR_CrtTimeTenth = *((uint8_t*)addr + 13);
+        new_entry->DIR_CrtTime      = *((uint16_t*)addr + 14);
+        new_entry->DIR_CrtDate      = *((uint16_t*)addr + 16);
+        new_entry->DIR_LstAccDate   = *((uint16_t*)addr + 18);
+        new_entry->DIR_FstClusHI    = *((uint16_t*)addr + 20);
+        new_entry->DIR_WrtTime      = *((uint16_t*)addr + 22);
+        new_entry->DIR_WrtDate      = *((uint16_t*)addr + 24);
+        new_entry->DIR_FstClusLO    = *((uint16_t*)addr + 26);
+        new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
 
-            for(int i = 0; i < 11; ++i) {
-                new_entry->DIR_Name[i] = *(char*)(addr + i);
-            }
-            new_entry->DIR_Name[11] = '\0';
-            new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
-            new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
-            new_entry->DIR_CrtTimeTenth = *((uint8_t*)addr + 13);
-            new_entry->DIR_CrtTime      = *((uint16_t*)addr + 14);
-            new_entry->DIR_CrtDate      = *((uint16_t*)addr + 16);
-            new_entry->DIR_LstAccDate   = *((uint16_t*)addr + 18);
-            new_entry->DIR_FstClusHI    = *((uint16_t*)addr + 20);
-            new_entry->DIR_WrtTime      = *((uint16_t*)addr + 22);
-            new_entry->DIR_WrtDate      = *((uint16_t*)addr + 24);
-            new_entry->DIR_FstClusLO    = *((uint16_t*)addr + 26);
-            new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
-
-            // print_root(new_entry);
+        // printf("%u\n", count);
+        // printf("%u\n", addr);
+        count++;
+        print_root(new_entry);
 
 
-            entry_vector.push_back(new_entry);
-        }
+        entry_vector.push_back(new_entry);
         addr += 32;
     }
 
-    printf("%d\n", entry_vector.size());
+    // printf("%d\n", entry_vector.size());
     VMMemoryPoolDeallocate(1, addr);
     VMMutexRelease(sector_mutex);
     MachineResumeSignals(sigstate);
@@ -586,9 +568,9 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         //                                                                             the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
         //                                                                             the_bpb->cluster_count);
         // read FAT
-        print_bpb(the_bpb);
+        // print_bpb(the_bpb);
 
-        for (int i = 0; i < the_bpb->fat_size; ++i) {
+        for (int i = 0; i < the_bpb->fat_size; i+=512) {
             read_FAT(file_descriptor, (i+1)*512);
         }
         // for (int i = 0; i < fat_vector.size(); ++i)
