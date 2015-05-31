@@ -134,7 +134,7 @@ typedef struct{
     // SVMDateTime     DAccess;
     // SVMDateTime     DModify;
 
-    char        DIR_Name[11];
+    char        DIR_Name[12];
     uint8_t     DIR_Attr,
                 DIR_NTRes,
                 DIR_CrtTimeTenth;
@@ -363,6 +363,53 @@ void MachineFileCallback(void* param, int result) {
 }
 
 ///////////////////////// FAT Utility Functions ///////////////////////////
+void print_bpb(bpb* new_bpb) {
+    // unsigned char   oem_name[8];
+    // uint16_t        bytes_per_sector;
+    // uint8_t         sectors_per_cluster;
+    // uint16_t        reserved_sector_count;
+    // uint8_t         fat_count;                 //NumFATs
+    // uint16_t        root_entry_count;
+    // uint16_t        sector_count_16;           //TotSec16
+    // uint8_t         media;
+    // uint16_t        fat_size;
+    // uint16_t        sectors_per_track;
+    // uint16_t        head_count;                 //NumHeads
+    // uint32_t        hidden_sector_count;
+    // uint32_t        sector_count_32;            //TotSec32
+    // uint8_t         drive_number;
+    // uint8_t         boot_signature;
+    // unsigned char   volume_id[4];
+    // unsigned char   volume_label[11];
+    // unsigned char   file_system_type[8];
+    // uint8_t         root_dir_sectors;
+    // uint8_t         first_root_sector;
+    // uint8_t         first_data_sector;
+    // uint16_t        cluster_count;
+    printf("OEM Name             : %s\n",       new_bpb->oem_name);
+    printf("Bytes Per Sector     : %u\n",       new_bpb->bytes_per_sector);
+    printf("Sectors Per Cluster  : %u\n",       new_bpb->sectors_per_cluster);
+    printf("Reserved Sector Count: %u\n",       new_bpb->reserved_sector_count);
+    printf("Fat Count            : %u\n",       new_bpb->fat_count);
+    printf("Root Entry Count     : %u\n",       new_bpb->root_entry_count);
+    printf("Sector Count 16      : %u\n",       new_bpb->sector_count_16);
+    printf("Media                : %u\n",       new_bpb->media);
+    printf("Fat Size             : %u\n",       new_bpb->fat_size);
+    printf("Sectors Per Track    : %u\n",       new_bpb->sectors_per_track);
+    printf("Head Count           : %u\n",       new_bpb->head_count);
+    printf("Hidden Sector Count  : %u\n",       new_bpb->hidden_sector_count);
+    printf("Sector Count 32      : %u\n",       new_bpb->sector_count_32);
+    printf("Drive Number         : %u\n",       new_bpb->drive_number);
+    printf("Boot Signature       : %u\n",       new_bpb->boot_signature);
+    printf("Volume ID            : %s\n",       new_bpb->volume_id);
+    printf("Volume Label         : %s\n",       new_bpb->volume_label);
+    printf("File System Type     : %s\n",       new_bpb->file_system_type);
+    printf("Root Dir Sectors     : %u\n",       new_bpb->root_dir_sectors);
+    printf("First Root Sector    : %u\n",       new_bpb->first_root_sector);
+    printf("First Data Sector    : %u\n",       new_bpb->first_data_sector);
+    printf("Cluster Count        : %u\n",       new_bpb->cluster_count);
+}
+
 void read_bpb(int fd, int offset) {
     MachineSuspendSignals(sigstate);
     VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
@@ -407,6 +454,21 @@ void read_FAT(int fd, int offset) {
     MachineResumeSignals(sigstate);
 }
 
+void print_root(entry * new_entry) {
+    printf("DIR_Name        : %s\n",  new_entry->DIR_Name);
+    printf("DIR_Attr        : %x\n",  new_entry->DIR_Attr);
+    printf("DIR_NTRes       : %x\n",  new_entry->DIR_NTRes);
+    printf("DIR_CrtTimeTenth: %x\n",  new_entry->DIR_CrtTimeTenth);
+    printf("DIR_CrtTime     : %x\n",  new_entry->DIR_CrtTime);
+    printf("DIR_CrtDate     : %x\n",  new_entry->DIR_CrtDate);
+    printf("DIR_LstAccDate  : %x\n",  new_entry->DIR_LstAccDate);
+    printf("DIR_FstClusHI   : %x\n",  new_entry->DIR_FstClusHI);
+    printf("DIR_WrtTime     : %x\n",  new_entry->DIR_WrtTime);
+    printf("DIR_WrtDate     : %x\n",  new_entry->DIR_WrtDate);
+    printf("DIR_FstClusLO   : %x\n",  new_entry->DIR_FstClusLO);
+    printf("DIR_FileSize    : %x\n",  new_entry->DIR_FileSize);
+}
+
 void read_root(int fd, int offset) {
     MachineSuspendSignals(sigstate);
     VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
@@ -422,12 +484,12 @@ void read_root(int fd, int offset) {
 
     for (int i = 0; i < 512/32; ++i)
     {
-        printf("Address:     %p\n", addr);
+        // printf("Address          :%p\n", addr);
         if (((unsigned char *)addr)[11] & 0xF)
         {
         }
         else {
-            // entry* new_entry = new entry;
+            entry* new_entry = new entry;
             // for (int i = 0; i < 8; ++i)
             // {
             //     if (((char *)addr)[i] != 0x20)
@@ -447,6 +509,7 @@ void read_root(int fd, int offset) {
             for(int i = 0; i < 11; ++i) {
                 new_entry->DIR_Name[i] = *(char*)(addr + i);
             }
+            new_entry->DIR_Name[11] = '\0';
             new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
             new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
             new_entry->DIR_CrtTimeTenth = *((uint8_t*)addr + 13);
@@ -459,19 +522,8 @@ void read_root(int fd, int offset) {
             new_entry->DIR_FstClusLO    = *((uint16_t*)addr + 26);
             new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
 
-            // new_entry->DModify = *((SVMDateTime)addr+22);
-            printf("DIR_Name        : %s\n",  new_entry->DIR_Name);
-            printf("DIR_Attr        : %x\n",  new_entry->DIR_Attr);
-            printf("DIR_NTRes       : %x\n",  new_entry->DIR_NTRes);
-            printf("DIR_CrtTimeTenth: %x\n",  new_entry->DIR_CrtTimeTenth);
-            printf("DIR_CrtTime     : %x\n",  new_entry->DIR_CrtTime);
-            printf("DIR_CrtDate     : %x\n",  new_entry->DIR_CrtDate);
-            printf("DIR_LstAccDate  : %x\n",  new_entry->DIR_LstAccDate);
-            printf("DIR_FstClusHI   : %x\n",  new_entry->DIR_FstClusHI);
-            printf("DIR_WrtTime     : %x\n",  new_entry->DIR_WrtTime);
-            printf("DIR_WrtDate     : %x\n",  new_entry->DIR_WrtDate);
-            printf("DIR_FstClusLO   : %x\n",  new_entry->DIR_FstClusLO);
-            printf("DIR_FileSize    : %x\n",  new_entry->DIR_FileSize);
+            // print_root(new_entry);
+
 
             entry_vector.push_back(new_entry);
         }
@@ -487,6 +539,8 @@ void read_root(int fd, int offset) {
 void write_sector() {
 
 }
+
+
 
 ///////////////////////// VMThread Functions ///////////////////////////
 TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemorySize sharedsize, const char *mount, int argc, char *argv[]) { //The time in milliseconds of the virtual machine tick is specified by the tickms parameter, the machine responsiveness is specified by the machinetickms.
@@ -532,6 +586,8 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         //                                                                             the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
         //                                                                             the_bpb->cluster_count);
         // read FAT
+        print_bpb(the_bpb);
+
         for (int i = 0; i < the_bpb->fat_size; ++i) {
             read_FAT(file_descriptor, (i+1)*512);
         }
@@ -540,8 +596,8 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         //     printf("%x\n", fat_vector[i]);
         // }
         // read root
-        for (int i = the_bpb->first_root_sector; i < the_bpb->first_data_sector; ++i) {
-            printf("#########%d\n", i);
+        for (uint8_t i = the_bpb->first_root_sector; i < the_bpb->first_data_sector; ++i) {
+            // printf("##################%d\n", i);
             read_root(file_descriptor, i*512);
         }
         // call VMMain
