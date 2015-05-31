@@ -419,14 +419,14 @@ void read_root(int fd, int offset) {
     scheduler();
     for (int i = 0; i < 512/32; ++i)
     {
+        printf("%p\n", addr);
         printf("11-%d\n", i);
         if (((unsigned char *)addr)[11] & 0xF) 
         {
             printf("12-%d\n", i);
-            continue;
         }
         else {
-
+            printf("13-%d\n", i);
             entry* new_entry = new entry;
             for (int i = 0; i < 8; ++i)
             {
@@ -450,9 +450,8 @@ void read_root(int fd, int offset) {
             // entry->DAccess = 
             // entry->DModify = 
             entry_vector.push_back(new_entry);
-            addr += 32;
         }
-        printf("13-%d\n", i);
+        addr += 32;
     }
     printf("%d\n", entry_vector.size());
     VMMemoryPoolDeallocate(1, addr);
