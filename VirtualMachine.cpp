@@ -134,7 +134,7 @@ typedef struct{
     // SVMDateTime     DAccess;
     // SVMDateTime     DModify;
 
-    char        DIR_Name[VM_FILE_SYSTEM_SFN_SIZE];
+    char        DIR_Name[11];
     uint8_t     DIR_Attr,
                 DIR_NTRes,
                 DIR_CrtTimeTenth;
@@ -427,21 +427,25 @@ void read_root(int fd, int offset) {
         {
         }
         else {
-            entry* new_entry = new entry;
-            for (int i = 0; i < 8; ++i)
-            {
-                if (((char *)addr)[i] != 0x20)
-                {
-                    new_entry->DIR_Name[i] = ((char *)addr)[i];
-                }
-            }
-            new_entry->DIR_Name[i] = '.';
-            for (int i = 0; i < 3; ++i)
-            {
-                if (((char *)addr)[i] != 0x20)
-                {
-                    new_entry->DIR_Name[8+i] = ((char *)addr)[i];
-                }
+            // entry* new_entry = new entry;
+            // for (int i = 0; i < 8; ++i)
+            // {
+            //     if (((char *)addr)[i] != 0x20)
+            //     {
+            //         new_entry->DIR_Name[i] = ((char *)addr)[i];
+            //     }
+            // }
+            // new_entry->DIR_Name[i] = '.';
+            // for (int i = 0; i < 3; ++i)
+            // {
+            //     if (((char *)addr)[i] != 0x20)
+            //     {
+            //         new_entry->DIR_Name[8+i] = ((char *)addr)[i];
+            //     }
+            // }
+
+            for(int i = 0; i < 11; ++i) {
+                new_entry->DIR_Name[i] = *(char*)(addr + i);
             }
             new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
             new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
@@ -456,18 +460,18 @@ void read_root(int fd, int offset) {
             new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
 
             // new_entry->DModify = *((SVMDateTime)addr+22);
-            printf("DIR_Name        : %x\n \n",  new_entry->DIR_Name);
-            printf("DIR_Attr        : %x\n",     new_entry->DIR_Attr);
-            printf("DIR_NTRes       : %x\n",     new_entry->DIR_NTRes);
-            printf("DIR_CrtTimeTenth: %x\n",     new_entry->DIR_CrtTimeTenth);
-            printf("DIR_CrtTime     : %x\n",     new_entry->DIR_CrtTime);
-            printf("DIR_CrtDate     : %x\n \n",  new_entry->DIR_CrtDate);
-            printf("DIR_LstAccDate  : %x\n \n",  new_entry->DIR_LstAccDate);
-            printf("DIR_FstClusHI   : %x\n \n",  new_entry->DIR_FstClusHI);
-            printf("DIR_WrtTime     : %x\n \n",  new_entry->DIR_WrtTime);
-            printf("DIR_WrtDate     : %x\n \n",  new_entry->DIR_WrtDate);
-            printf("DIR_FstClusLO   : %x\n \n",  new_entry->DIR_FstClusLO);
-            printf("DIR_FileSize    : %x\n \n",  new_entry->DIR_FileSize);
+            printf("DIR_Name        : %s\n",  new_entry->DIR_Name);
+            printf("DIR_Attr        : %x\n",  new_entry->DIR_Attr);
+            printf("DIR_NTRes       : %x\n",  new_entry->DIR_NTRes);
+            printf("DIR_CrtTimeTenth: %x\n",  new_entry->DIR_CrtTimeTenth);
+            printf("DIR_CrtTime     : %x\n",  new_entry->DIR_CrtTime);
+            printf("DIR_CrtDate     : %x\n",  new_entry->DIR_CrtDate);
+            printf("DIR_LstAccDate  : %x\n",  new_entry->DIR_LstAccDate);
+            printf("DIR_FstClusHI   : %x\n",  new_entry->DIR_FstClusHI);
+            printf("DIR_WrtTime     : %x\n",  new_entry->DIR_WrtTime);
+            printf("DIR_WrtDate     : %x\n",  new_entry->DIR_WrtDate);
+            printf("DIR_FstClusLO   : %x\n",  new_entry->DIR_FstClusLO);
+            printf("DIR_FileSize    : %x\n",  new_entry->DIR_FileSize);
 
             entry_vector.push_back(new_entry);
         }
