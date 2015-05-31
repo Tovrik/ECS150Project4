@@ -95,7 +95,6 @@ class MemoryPool {
 
 
 ///////////////////////// BPB Struct definition ///////////////////////////
-
 #pragma pack(1)
 typedef struct bpb {
     unsigned char   oem_name[8];
@@ -127,6 +126,18 @@ typedef struct bpb {
     uint16_t        cluster_count;
 } bpb;
 
+///////////////////////// Root Entry Struct definition ///////////////////////////
+typedef struct{
+    char DLongFileName[VM_FILE_SYSTEM_MAX_PATH];
+    char DShortFileName[VM_FILE_SYSTEM_SFN_SIZE];
+    unsigned int DSize;
+    unsigned char DAttributes;
+    SVMDateTime DCreate;
+    SVMDateTime DAccess;
+    SVMDateTime DModify;
+    uint16_t cluster_location;
+} entry;
+
 ///////////////////////// Globals ///////////////////////////
 #define VM_THREAD_PRIORITY_IDLE                  ((TVMThreadPriority)0x00)
 
@@ -146,6 +157,7 @@ MemoryPool* current_mem_pool;
 int         file_descriptor;
 bpb         *the_bpb;
 TVMMutexID  sector_mutex;
+vector<entry*> entry_vector;
 
 volatile int timer;
 TMachineSignalStateRef sigstate;
@@ -360,8 +372,7 @@ void read_bpb(int fd, int offset) {
 }
 
 void read_FAT(int fd, int offset) {
-    TMachineSignalStateRef sigstate1;
-    MachineSuspendSignals(sigstate1);
+    MachineSuspendSignals(sigstate);
     VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
     VMMemoryPoolAllocate(1, 512, &FAT_buffer);
     MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
@@ -374,16 +385,79 @@ void read_FAT(int fd, int offset) {
     for (int i = 0; i < 256; ++i)
     {
         if(temp_buffer[i] != 0) {
-        fat_vector.push_back(temp_buffer[i]);
+            fat_vector.push_back(temp_buffer[i]);
         }
         else {
             break;
         }
-        // printf("%d\n", i);
     }
     VMMemoryPoolDeallocate(1, FAT_buffer);
     VMMutexRelease(sector_mutex);
-    MachineResumeSignals(sigstate1);
+    MachineResumeSignals(sigstate);
+}
+
+void read_root(int fd, int offset) {
+    printf("1\n");
+    MachineSuspendSignals(sigstate);
+    printf("2\n");
+    VMMutexAcquire(sector_mutex, VM_TIMEOUT_INFINITE);
+    printf("3\n");
+    void *addr;
+    printf("4\n");
+    VMMemoryPoolAllocate(1, 512, &addr);
+    printf("5\n");
+    MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
+    printf("6\n");
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    printf("7\n");
+    scheduler();
+    printf("8\n");
+    MachineFileRead(fd, addr, 512, MachineFileCallback, current_thread);
+    printf("9\n");
+    current_thread->thread_state = VM_THREAD_STATE_WAITING;
+    printf("10\n");
+    scheduler();
+    for (int i = 0; i < 512/32; ++i)
+    {
+        printf("11-%d\n", i);
+        if (((unsigned char *)addr)[11] & 0xF) 
+        {
+            printf("12-%d\n", i);
+            continue;
+        }
+        else {
+
+            entry* new_entry = new entry;
+            for (int i = 0; i < 8; ++i)
+            {
+                if (((char *)addr)[i] != 0x20)
+                {
+                    new_entry->DShortFileName[i] = ((char *)addr)[i];
+                }
+            }
+            new_entry->DShortFileName[i] = '.';
+            for (int i = 0; i < 3; ++i)
+            {
+                if (((char *)addr)[i] != 0x20)
+                {
+                    new_entry->DShortFileName[8+i] = ((char *)addr)[i];
+                }
+            }
+            new_entry->DSize = *((unsigned int*)addr + 28);
+            new_entry->DAttributes = *((unsigned char*)addr+11);
+            new_entry->cluster_location = *((uint16_t*)addr+26);
+            // entry->DCreate = 
+            // entry->DAccess = 
+            // entry->DModify = 
+            entry_vector.push_back(new_entry);
+            addr += 32;
+        }
+        printf("13-%d\n", i);
+    }
+    printf("%d\n", entry_vector.size());
+    VMMemoryPoolDeallocate(1, addr);
+    VMMutexRelease(sector_mutex);
+    MachineResumeSignals(sigstate);
 }
 
 void write_sector() {
@@ -428,20 +502,30 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         the_bpb->first_root_sector = the_bpb->reserved_sector_count + the_bpb->fat_count * the_bpb->fat_size;
         the_bpb->first_data_sector = the_bpb->first_root_sector + the_bpb->root_dir_sectors;
         the_bpb->cluster_count     = (the_bpb->sector_count_32 - the_bpb->first_data_sector) / the_bpb->sectors_per_cluster;
-
+        // printf("bps %d\nspc %d\nrsc %d\nfc %d\nrec %d\nsc16 %d\nm %d\nfs %d\nspt %d\nhc %d\nsc32 %d\nfrs %d\nrds %d\nfds %d\ncc %d\n", the_bpb->bytes_per_sector, the_bpb->sectors_per_cluster, the_bpb->reserved_sector_count,
+        //                                                                             the_bpb->fat_count, the_bpb->root_entry_count, the_bpb->sector_count_16, the_bpb->media, the_bpb->fat_size,
+        //                                                                             the_bpb->sectors_per_track, the_bpb->head_count, the_bpb->sector_count_32,
+        //                                                                             the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
+        //                                                                             the_bpb->cluster_count);
+        // read FAT
         for (int i = 0; i < the_bpb->fat_size; ++i) {
             read_FAT(file_descriptor, (i+1)*512);
-            printf("%x", fat_vector[i]);
         }
-
-        printf("bps %d\nspc %d\nrsc %d\nfc %d\nrec %d\nsc16 %d\nm %d\nfs %d\nspt %d\nhc %d\nsc32 %d\nfrs %d\nrds %d\nfds %d\ncc %d\n", the_bpb->bytes_per_sector, the_bpb->sectors_per_cluster, the_bpb->reserved_sector_count,
-                                                                                    the_bpb->fat_count, the_bpb->root_entry_count, the_bpb->sector_count_16, the_bpb->media, the_bpb->fat_size,
-                                                                                    the_bpb->sectors_per_track, the_bpb->head_count, the_bpb->sector_count_32,
-                                                                                    the_bpb->first_root_sector, the_bpb->root_dir_sectors, the_bpb->first_data_sector,
-                                                                                    the_bpb->cluster_count);
+        // for (int i = 0; i < fat_vector.size(); ++i)
+        // {
+        //     printf("%x\n", fat_vector[i]);
+        // }
+        // read root
+        for (int i = the_bpb->first_root_sector; i < the_bpb->first_data_sector; ++i) {
+            printf("#########%d\n", i);
+            read_root(file_descriptor, i*512); 
+        }
         // call VMMain
         VMMain(argc, argv);
-        // unmount()
+        // unmount
+        MachineFileClose(file_descriptor, MachineFileCallback, current_thread);
+        current_thread->thread_state = VM_THREAD_STATE_WAITING;
+        scheduler();
         return VM_STATUS_SUCCESS;
     }
     else {
