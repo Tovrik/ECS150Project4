@@ -1,0 +1,16 @@
+## Partners
+Stefan Peterson:
+- 998556530
+- stpeterson@ucdavis.edu
+
+Shai Bruhis:
+- 997440977
+- sbruhis@ucdavis.edu
+
+## Instructions
+To compile type "make" which runs our Makefile
+Then type "./vm ./hello.so" to run the code
+
+## Resources
+
+
