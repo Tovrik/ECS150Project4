@@ -254,6 +254,7 @@ void scheduler() {
         scheduler_action(normal_priority_queue);
     }
     else if (!low_priority_queue.empty()) {
+
         scheduler_action(low_priority_queue);
     }
     // schedule idle thread
@@ -268,6 +269,7 @@ void scheduler() {
         TCB* temp = current_thread;
         current_thread = idle_thread;
         current_thread->thread_state = VM_THREAD_STATE_RUNNING;
+        printf("%d\n", thread_vector.size());
         thread_vector.push_back(current_thread);
         MachineContextSwitch(&(temp->machine_context), &(idle_thread->machine_context));
     }
@@ -476,20 +478,18 @@ void read_root(int fd, int offset) {
     VMMemoryPoolAllocate(1, 512, &addr);
     MachineFileSeek(fd, offset, 0, MachineFileCallback, current_thread);
     current_thread->thread_state = VM_THREAD_STATE_WAITING;
-    scheduler();
+    scheduler(); //FAILING ON sector62 entry 463
 
     MachineFileRead(fd, addr, 512, MachineFileCallback, current_thread);
     current_thread->thread_state = VM_THREAD_STATE_WAITING;
     scheduler();
-
+    entry* new_entry = new entry;
     for (int i = 0; i < 512/32; ++i)
     {
-        entry* new_entry = new entry;
-
         for(int j = 0; j < 11; ++j) {
             new_entry->DIR_Name[j] = *(char*)(addr + j);
         }
-        new_entry->DIR_Name[11] = '\0';
+        new_entry->DIR_Name[11]     = '\0';
         new_entry->DIR_Attr         = *((uint8_t*)addr + 11);
         new_entry->DIR_NTRes        = *((uint8_t*)addr + 12);
         new_entry->DIR_CrtTimeTenth = *((uint8_t*)addr + 13);
@@ -502,16 +502,13 @@ void read_root(int fd, int offset) {
         new_entry->DIR_FstClusLO    = *((uint16_t*)addr + 26);
         new_entry->DIR_FileSize     = *((uint32_t*)addr + 28);
 
-        // printf("%u\n", count);
+        printf("%u\n", count);
         // printf("%u\n", addr);
         count++;
-        print_root(new_entry);
-
-
+        // print_root(new_entry);
         entry_vector.push_back(new_entry);
         addr += 32;
     }
-
     // printf("%d\n", entry_vector.size());
     VMMemoryPoolDeallocate(1, addr);
     VMMutexRelease(sector_mutex);
@@ -529,6 +526,7 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
     typedef void (*TVMMainEntry)(int argc, char* argv[]);
     TVMMainEntry VMMain;
     VMMain = VMLoadModule(argv[0]);
+
     if (VMMain != NULL) {
         sharedsize = (sharedsize + 0xFFF) & (~0xFFF);
         void *shared_mem_base = MachineInitialize(machinetickms, sharedsize); //The timeout parameter specifies the number of milliseconds the machine will sleep between checking for requests.
@@ -569,7 +567,8 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         //                                                                             the_bpb->cluster_count);
         // read FAT
         // print_bpb(the_bpb);
-
+        // printf("%d\n", the_bpb->root_entry_count);
+        entry_vector.reserve(the_bpb->root_entry_count);
         for (int i = 0; i < the_bpb->fat_size; i+=512) {
             read_FAT(file_descriptor, (i+1)*512);
         }
@@ -579,7 +578,7 @@ TVMStatus VMStart(int tickms, TVMMemorySize heapsize, int machinetickms, TVMMemo
         // }
         // read root
         for (uint8_t i = the_bpb->first_root_sector; i < the_bpb->first_data_sector; ++i) {
-            // printf("##################%d\n", i);
+            printf("################## %d ################## %d \n", i, the_bpb->first_data_sector);
             read_root(file_descriptor, i*512);
         }
         // call VMMain
